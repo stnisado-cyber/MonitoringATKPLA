@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { AtkItem } from '../types';
-import { Box, Send, Loader2, CheckCircle2, AlertCircle, ShoppingCart, Building2, UserCircle, Search, ChevronDown, Check } from 'lucide-react';
+import { Box, Send, Loader2, CheckCircle2, AlertCircle, ShoppingCart, Building2, UserCircle, Search, ChevronDown, Check, Calendar } from 'lucide-react';
 
 const DEPARTEMEN_LIST = [
   "Komisaris",
@@ -31,12 +31,19 @@ const UserPortal: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Helper for current date format (YYYY-MM-DD)
+  const getCurrentDate = () => {
+    const now = new Date();
+    return now.toISOString().split('T')[0];
+  };
+
   const [formData, setFormData] = useState({
     nama_pengambil: '',
     departemen: '',
     item_id: '',
     jumlah: 1,
-    keterangan: ''
+    keterangan: '',
+    created_at: getCurrentDate() // Default to current date only
   });
 
   useEffect(() => {
@@ -92,12 +99,19 @@ const UserPortal: React.FC = () => {
       
       if (updateError) throw updateError;
 
+      // When sending back-date, we combine the manual date with the current time
+      // to ensure it correctly sorts in the transaction history
+      const now = new Date();
+      const [year, month, day] = formData.created_at.split('-').map(Number);
+      const transactionDate = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+
       const transactionData: any = {
         item_id: formData.item_id,
         jumlah: formData.jumlah,
         tipe: 'keluar',
         nama_pengambil: formData.nama_pengambil,
-        keterangan: formData.keterangan
+        keterangan: formData.keterangan,
+        created_at: transactionDate.toISOString() 
       };
       
       if (formData.departemen) {
@@ -108,7 +122,14 @@ const UserPortal: React.FC = () => {
       if (transError) throw transError;
 
       setMessage({ type: 'success', text: `Berhasil! ${selectedItem?.nama_barang || 'Permintaan'} telah dicatat.` });
-      setFormData({ ...formData, item_id: '', jumlah: 1, keterangan: '' });
+      
+      setFormData({ 
+        ...formData, 
+        item_id: '', 
+        jumlah: 1, 
+        keterangan: '',
+        created_at: getCurrentDate()
+      });
       setSearchQuery('');
       fetchItems();
     } catch (err: any) {
@@ -135,11 +156,11 @@ const UserPortal: React.FC = () => {
           <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/20 rounded-full blur-[100px]"></div>
           <div className="relative z-10">
             <h1 className="text-4xl font-black leading-tight mb-6">Ambil <span className="text-indigo-400">ATK.</span></h1>
-            <p className="text-slate-400 text-sm font-medium">Gunakan formulir ini untuk mencatat barang yang Anda ambil dari lemari stok.</p>
+            <p className="text-slate-400 text-sm font-medium">Catat pengambilan barang. Sekarang lebih simpel dengan pilih tanggal saja tanpa jam.</p>
           </div>
           <div className="relative z-10 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
-            <p className="text-sm font-bold">Admin Monitoring</p>
-            <p className="text-xs text-slate-400">Pastikan data yang diinput benar.</p>
+            <p className="text-sm font-bold">Logistik PLA</p>
+            <p className="text-xs text-slate-400">Back-date tersedia untuk laporan telat.</p>
           </div>
         </div>
 
@@ -164,8 +185,8 @@ const UserPortal: React.FC = () => {
                     required
                     value={formData.nama_pengambil}
                     onChange={e => setFormData({ ...formData, nama_pengambil: e.target.value })}
-                    className="w-full pl-12 pr-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700"
-                    placeholder="Nama Anda"
+                    className="w-full pl-12 pr-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 transition-all"
+                    placeholder="Nama Lengkap"
                   />
                   <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
                 </div>
@@ -174,9 +195,10 @@ const UserPortal: React.FC = () => {
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Departemen</label>
                 <select
+                  required
                   value={formData.departemen}
                   onChange={e => setFormData({ ...formData, departemen: e.target.value })}
-                  className="w-full px-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 appearance-none"
+                  className="w-full px-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 appearance-none transition-all"
                 >
                   <option value="">Pilih Departemen</option>
                   {DEPARTEMEN_LIST.map(dept => <option key={dept} value={dept}>{dept}</option>)}
@@ -184,34 +206,51 @@ const UserPortal: React.FC = () => {
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tanggal Pengambilan</label>
+              <div className="relative">
+                <input
+                  type="date"
+                  required
+                  value={formData.created_at}
+                  onChange={e => setFormData({ ...formData, created_at: e.target.value })}
+                  className="w-full pl-12 pr-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-bold text-slate-700 transition-all"
+                />
+                <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+              </div>
+              <p className="text-[9px] text-indigo-400 font-bold italic ml-2 mt-1">
+                *Hanya pilih tanggal. Jam akan otomatis mengikuti waktu sistem.
+              </p>
+            </div>
+
             <div className="space-y-1.5 relative" ref={dropdownRef}>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Pilih Barang</label>
               <div 
                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                className={`w-full pl-12 pr-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 flex items-center justify-between cursor-pointer ${isDropdownOpen ? 'ring-2 ring-indigo-500 bg-white' : ''}`}
+                className={`w-full pl-12 pr-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 flex items-center justify-between cursor-pointer transition-all ${isDropdownOpen ? 'ring-2 ring-indigo-500 bg-white border-transparent' : ''}`}
               >
-                <span className={`text-sm font-bold ${formData.item_id ? 'text-slate-800' : 'text-slate-400'}`}>
+                <span className={`text-sm font-bold truncate pr-4 ${formData.item_id ? 'text-slate-800' : 'text-slate-400'}`}>
                   {selectedItem ? `${selectedItem.nama_barang} (${selectedItem.stok} ${selectedItem.satuan})` : 'Klik untuk mencari...'}
                 </span>
-                <ChevronDown size={20} className="text-slate-400" />
+                <ChevronDown size={20} className={`text-slate-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
                 <Box className="absolute left-4 top-[42px] text-slate-300" size={20} />
               </div>
 
               {isDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[24px] border border-slate-100 shadow-2xl z-50 overflow-hidden">
-                  <div className="p-3 border-b">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[24px] border border-slate-100 shadow-2xl z-50 overflow-hidden animate-fade-in">
+                  <div className="p-3 border-b bg-slate-50/50">
                     <input
                       autoFocus
                       type="text"
-                      placeholder="Ketik nama barang..."
+                      placeholder="Cari nama barang..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-50 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
+                      className="w-full px-4 py-3 bg-white rounded-xl border border-slate-100 outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
                       onClick={(e) => e.stopPropagation()}
                     />
                   </div>
-                  <div className="max-h-[300px] overflow-y-auto p-2">
-                    {filteredItems.map(item => (
+                  <div className="max-h-[250px] overflow-y-auto p-2 custom-scrollbar">
+                    {filteredItems.length > 0 ? filteredItems.map(item => (
                       <div
                         key={item.id}
                         onClick={() => {
@@ -221,15 +260,17 @@ const UserPortal: React.FC = () => {
                             setSearchQuery('');
                           }
                         }}
-                        className={`flex items-center justify-between px-4 py-3 rounded-xl mb-1 cursor-pointer ${formData.item_id === item.id ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50 text-slate-700'} ${(item.stok || 0) <= 0 ? 'opacity-30 grayscale' : ''}`}
+                        className={`flex items-center justify-between px-4 py-3 rounded-xl mb-1 cursor-pointer transition-all ${formData.item_id === item.id ? 'bg-indigo-600 text-white' : 'hover:bg-indigo-50 text-slate-700'} ${(item.stok || 0) <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
                       >
                         <div className="flex flex-col">
                           <span className="text-sm font-black">{item.nama_barang || 'Item'}</span>
-                          <span className="text-[10px] font-bold uppercase">{item.kategori} • Stok: {item.stok || 0}</span>
+                          <span className={`text-[10px] font-bold uppercase ${formData.item_id === item.id ? 'text-indigo-200' : 'text-slate-400'}`}>{item.kategori} • Tersedia: {item.stok || 0}</span>
                         </div>
                         {formData.item_id === item.id && <Check size={18} />}
                       </div>
-                    ))}
+                    )) : (
+                      <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-widest">Barang tidak ditemukan</div>
+                    )}
                   </div>
                 </div>
               )}
@@ -237,20 +278,20 @@ const UserPortal: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Jumlah</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Jumlah Ambil</label>
                 <input
                   type="number"
                   min="1"
                   required
                   value={formData.jumlah}
                   onChange={e => setFormData({ ...formData, jumlah: parseInt(e.target.value) || 1 })}
-                  className="w-full px-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-black text-indigo-600"
+                  className="w-full px-6 py-4 rounded-[18px] border border-slate-200 bg-slate-50 focus:bg-white outline-none font-black text-indigo-600 text-lg transition-all"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Satuan</label>
-                <div className="px-6 py-4 rounded-[18px] bg-slate-100 text-slate-500 font-black h-[58px] flex items-center uppercase text-xs">
-                  {selectedItem?.satuan || 'UNIT'}
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Satuan Barang</label>
+                <div className="px-6 py-4 rounded-[18px] bg-slate-100 text-slate-500 font-black h-[62px] flex items-center uppercase text-xs">
+                  {selectedItem?.satuan || '-'}
                 </div>
               </div>
             </div>
@@ -259,10 +300,14 @@ const UserPortal: React.FC = () => {
               type="submit"
               disabled={submitting || !formData.item_id}
               className={`w-full py-5 rounded-[24px] font-black text-white text-xs uppercase tracking-widest transition-all ${
-                submitting || !formData.item_id ? 'bg-slate-200 shadow-none' : 'bg-indigo-600 hover:bg-indigo-700 shadow-xl'
+                submitting || !formData.item_id ? 'bg-slate-200 shadow-none cursor-not-allowed' : 'bg-indigo-600 hover:bg-slate-900 shadow-xl shadow-indigo-100'
               }`}
             >
-              {submitting ? 'Mengirim...' : 'Konfirmasi Ambil Barang'}
+              {submitting ? (
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="animate-spin" size={18} /> Memproses...
+                </div>
+              ) : 'Konfirmasi Pengambilan'}
             </button>
           </form>
         </div>
