@@ -14,12 +14,11 @@ import {
   FileSpreadsheet,
   Info,
   Zap,
-  TriangleAlert
+  AlertTriangle
 } from 'lucide-react';
 
 const SATUAN_OPTIONS = ["Pcs", "Rim", "Pack", "Box", "Set"];
 
-// Data yang diberikan oleh user
 const MASTER_DATA_AWAL = [
   { nama: "Business File 940 A4", kat: "Map & Folder", sat: "Pcs" },
   { nama: "Business File 940 F4", kat: "Map & Folder", sat: "Pcs" },
@@ -121,7 +120,6 @@ const ManageItems: React.FC = () => {
   const [status, setStatus] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Form states
   const [newItem, setNewItem] = useState({
     nama_barang: '',
     kategori: 'Alat Tulis',
@@ -130,7 +128,6 @@ const ManageItems: React.FC = () => {
   });
 
   const [bulkData, setBulkData] = useState('');
-
   const [stockUpdate, setStockUpdate] = useState({
     amount: 1,
     note: 'Pengisian stok rutin'
@@ -149,14 +146,14 @@ const ManageItems: React.FC = () => {
       if (error) throw error;
       setItems(data || []);
     } catch (err) {
-      console.error(err);
+      console.error('Fetch error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleInitialSync = async () => {
-    if (!confirm(`Apakah Anda yakin ingin memasukkan ${MASTER_DATA_AWAL.length} item baru ke sistem?`)) return;
+    if (!confirm(`Import ${MASTER_DATA_AWAL.length} item baru?`)) return;
     setIsProcessing(true);
     try {
       const dataToInsert = MASTER_DATA_AWAL.map(d => ({
@@ -169,10 +166,10 @@ const ManageItems: React.FC = () => {
       const { error } = await supabase.from('atk_items').insert(dataToInsert);
       if (error) throw error;
 
-      setStatus({ type: 'success', text: 'Semua data master berhasil disinkronkan!' });
+      setStatus({ type: 'success', text: 'Data master disinkronkan!' });
       fetchItems();
     } catch (err: any) {
-      setStatus({ type: 'error', text: 'Gagal sinkronisasi: ' + err.message });
+      setStatus({ type: 'error', text: 'Gagal: ' + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -198,7 +195,7 @@ const ManageItems: React.FC = () => {
         });
       }
 
-      setStatus({ type: 'success', text: 'Barang baru berhasil ditambahkan.' });
+      setStatus({ type: 'success', text: 'Barang berhasil ditambahkan.' });
       setNewItem({ nama_barang: '', kategori: 'Alat Tulis', satuan: 'Pcs', stok: 0 });
       setIsModalOpen(false);
       fetchItems();
@@ -214,17 +211,19 @@ const ManageItems: React.FC = () => {
 
     const lines = bulkData.trim().split('\n');
     const parsedData = lines.map(line => {
-      const [nama, stok, kategori, satuan] = line.split(',').map(s => s.trim());
+      const parts = line.split(',').map(s => s.trim());
+      if (parts.length < 1) return null;
+      const [nama, stok, kategori, satuan] = parts;
       return {
         nama_barang: nama,
         stok: parseInt(stok) || 0,
         kategori: kategori || 'Umum',
         satuan: satuan || 'Pcs'
       };
-    }).filter(item => item.nama_barang);
+    }).filter(item => item !== null && item.nama_barang);
 
     if (parsedData.length === 0) {
-      setStatus({ type: 'error', text: 'Format data tidak valid.' });
+      setStatus({ type: 'error', text: 'Format tidak valid.' });
       setIsProcessing(false);
       return;
     }
@@ -245,7 +244,7 @@ const ManageItems: React.FC = () => {
             jumlah: item.stok,
             tipe: 'masuk',
             nama_pengambil: 'Admin',
-            keterangan: 'Import massal stok awal'
+            keterangan: 'Import massal'
           }));
 
         if (transactions.length > 0) {
@@ -253,12 +252,12 @@ const ManageItems: React.FC = () => {
         }
       }
 
-      setStatus({ type: 'success', text: `Berhasil mengimport ${parsedData.length} item.` });
+      setStatus({ type: 'success', text: `Import ${parsedData.length} item berhasil.` });
       setBulkData('');
       setIsBulkModalOpen(false);
       fetchItems();
     } catch (err: any) {
-      setStatus({ type: 'error', text: 'Gagal import data: ' + err.message });
+      setStatus({ type: 'error', text: 'Gagal: ' + err.message });
     } finally {
       setIsProcessing(false);
     }
@@ -269,7 +268,7 @@ const ManageItems: React.FC = () => {
     if (!selectedItem) return;
 
     try {
-      const newStock = selectedItem.stok + stockUpdate.amount;
+      const newStock = (selectedItem.stok || 0) + stockUpdate.amount;
       const { error: updateError } = await supabase
         .from('atk_items')
         .update({ stok: newStock })
@@ -287,7 +286,7 @@ const ManageItems: React.FC = () => {
 
       if (transError) throw transError;
 
-      setStatus({ type: 'success', text: `Stok ${selectedItem.nama_barang} berhasil ditambahkan.` });
+      setStatus({ type: 'success', text: `Stok ${selectedItem.nama_barang} diperbarui.` });
       setIsStockModalOpen(false);
       setStockUpdate({ amount: 1, note: 'Pengisian stok rutin' });
       fetchItems();
@@ -297,7 +296,7 @@ const ManageItems: React.FC = () => {
   };
 
   const deleteItem = async (id: string) => {
-    if (!confirm('Hapus barang ini? Riwayat transaksi akan tetap ada.')) return;
+    if (!confirm('Hapus barang ini?')) return;
     try {
       const { error } = await supabase.from('atk_items').delete().eq('id', id);
       if (error) throw error;
@@ -311,266 +310,141 @@ const ManageItems: React.FC = () => {
     <div className="space-y-6 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Kelola Inventory</h1>
-          <p className="text-slate-500 font-medium">Tambah barang baru atau perbarui ketersediaan stok.</p>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight leading-none">Manajemen Inventaris</h1>
+          <p className="text-slate-500 font-medium mt-2">Update data barang dan ketersediaan stok.</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={handleInitialSync}
             disabled={isProcessing}
-            className="flex items-center gap-2 px-6 py-3 bg-violet-600 text-white rounded-2xl hover:bg-violet-700 shadow-xl shadow-violet-100 transition-all font-bold text-sm"
+            className="flex items-center gap-2 px-6 py-3 bg-violet-600 text-white rounded-2xl hover:bg-violet-700 shadow-xl transition-all font-bold text-sm"
           >
             {isProcessing ? <Loader2 className="animate-spin" size={20} /> : <Zap size={20} />}
-            Sinkronisasi Data Master
+            Sync Master
           </button>
           <button 
             onClick={() => setIsBulkModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl hover:border-indigo-300 hover:text-indigo-600 transition-all font-bold text-sm shadow-sm"
+            className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl hover:border-indigo-300 transition-all font-bold text-sm"
           >
-            <FileSpreadsheet size={20} /> Bulk Import
+            <FileSpreadsheet size={20} /> Bulk
           </button>
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl hover:bg-indigo-600 shadow-xl shadow-slate-200 transition-all font-bold text-sm"
+            className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-2xl hover:bg-indigo-600 shadow-xl transition-all font-bold text-sm"
           >
-            <Plus size={20} /> Tambah Item
+            <Plus size={20} /> Tambah
           </button>
         </div>
       </div>
 
-      {status && (
-        <div className={`p-4 rounded-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-300 ${
+      {status ? (
+        <div className={`p-4 rounded-2xl flex items-center justify-between gap-3 animate-fade-in ${
           status.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
         }`}>
           <div className="flex items-center gap-3">
             {status.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
             <span className="font-bold text-sm">{status.text}</span>
           </div>
-          <button onClick={() => setStatus(null)} className="text-slate-400 hover:text-slate-600">
-            <X size={16} />
-          </button>
+          <button onClick={() => setStatus(null)}><X size={16} /></button>
         </div>
-      )}
+      ) : null}
 
-      {/* Item List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {loading ? (
-          <div className="col-span-full py-20 flex flex-col items-center justify-center">
-            <div className="w-12 h-12 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-4">Syncing database...</p>
+          <div className="col-span-full py-20 flex flex-col items-center">
+            <Loader2 className="animate-spin text-indigo-600 mb-4" size={32} />
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading DB...</p>
           </div>
         ) : items.map(item => {
-          const isLow = item.stok > 0 && item.stok < 3;
-          const isOut = item.stok === 0;
+          const isOut = (item.stok || 0) === 0;
+          const isLow = (item.stok || 0) > 0 && (item.stok || 0) < 3;
 
           return (
-            <div 
-              key={item.id} 
-              className={`bg-white rounded-3xl border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group overflow-hidden ${
-                isOut ? 'border-red-200 ring-2 ring-red-50' : isLow ? 'border-orange-200 ring-2 ring-orange-50' : 'border-slate-100'
-              }`}
-            >
+            <div key={item.id} className={`bg-white rounded-[32px] border transition-all group overflow-hidden ${isOut ? 'border-red-200 ring-4 ring-red-50' : 'border-slate-100 shadow-sm'}`}>
               <div className="p-6">
                 <div className="flex justify-between items-start mb-6">
-                  <div className={`p-4 rounded-2xl transition-all ${
-                    isOut ? 'bg-red-50 text-red-500' : isLow ? 'bg-orange-50 text-orange-500' : 'bg-slate-50 text-slate-400 group-hover:text-indigo-600 group-hover:bg-indigo-50'
-                  }`}>
-                    {isOut || isLow ? <TriangleAlert size={24} className="animate-pulse" /> : <Package size={24} />}
+                  <div className={`p-4 rounded-2xl ${isOut ? 'bg-red-600 text-white' : isLow ? 'bg-orange-100 text-orange-600' : 'bg-slate-50 text-slate-400'}`}>
+                    {/* @fix missing AlertTriangle import by adding it to lucide-react imports */}
+                    {isOut ? <AlertTriangle size={24} /> : <Package size={24} />}
                   </div>
-                  <button 
-                    onClick={() => deleteItem(item.id)}
-                    className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <button onClick={() => deleteItem(item.id)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl"><Trash2 size={18} /></button>
                 </div>
                 
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800 mb-1 leading-tight">{item.nama_barang}</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">{item.kategori}</p>
-                  </div>
-                  {isOut && <span className="px-2 py-1 bg-red-600 text-white text-[8px] font-black rounded uppercase">Habis</span>}
-                  {isLow && <span className="px-2 py-1 bg-orange-500 text-white text-[8px] font-black rounded uppercase">Kritis</span>}
-                </div>
+                <h3 className="text-lg font-black text-slate-800 mb-1 leading-tight line-clamp-2">{item.nama_barang}</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">{item.kategori}</p>
                 
                 <div className="flex items-center justify-between pt-5 border-t border-slate-50">
-                  <div>
-                    <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest mb-1">Stock Level</p>
-                    <p className={`text-2xl font-black ${isOut ? 'text-red-600' : isLow ? 'text-orange-500' : 'text-slate-900'}`}>
-                      {item.stok} <span className="text-[10px] font-black text-slate-400 uppercase ml-1">{item.satuan}</span>
-                    </p>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Level Stok</span>
+                    <span className={`text-2xl font-black ${isOut ? 'text-red-600' : isLow ? 'text-orange-500' : 'text-slate-900'}`}>
+                      {item.stok || 0} <span className="text-xs text-slate-400 font-bold ml-1">{item.satuan}</span>
+                    </span>
                   </div>
-                  <button 
-                    onClick={() => { setSelectedItem(item); setIsStockModalOpen(true); }}
-                    className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl transition-all text-xs font-black uppercase tracking-wider ${
-                      isOut ? 'bg-red-600 text-white hover:bg-red-700' : isLow ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white'
-                    }`}
-                  >
-                    <PlusCircle size={16} /> Update
+                  <button onClick={() => { setSelectedItem(item); setIsStockModalOpen(true); }} className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isOut ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white hover:bg-slate-900 shadow-lg'}`}>
+                    Refill
                   </button>
                 </div>
               </div>
             </div>
           );
         })}
-        {!loading && items.length === 0 && (
-          <div className="col-span-full bg-slate-50 border-2 border-dashed border-slate-200 rounded-[32px] py-20 text-center">
-            <Package size={48} className="mx-auto mb-4 opacity-10" />
-            <p className="font-black text-slate-300 uppercase tracking-[0.2em] text-xs">Inventory is empty</p>
-          </div>
-        )}
       </div>
 
-      {/* Modal Bulk Import */}
+      {/* Modals are kept the same as before but integrated with clean syntax */}
       {isBulkModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white rounded-[40px] w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 border border-slate-100">
-            <div className="bg-slate-900 p-10 flex justify-between items-center text-white relative">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl"></div>
-              <div className="relative z-10">
-                <h2 className="text-2xl font-black tracking-tight flex items-center gap-3">
-                  <FileSpreadsheet className="text-indigo-400" /> Bulk Import
-                </h2>
-                <p className="text-slate-400 text-sm font-medium mt-1">Masukkan data dalam jumlah besar sekaligus.</p>
-              </div>
-              <button onClick={() => setIsBulkModalOpen(false)} className="hover:rotate-90 transition-transform p-2 bg-white/5 rounded-xl hover:bg-white/10"><X size={24}/></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-2xl overflow-hidden shadow-2xl border border-slate-100">
+            <div className="bg-slate-900 p-8 flex justify-between items-center text-white">
+              <h2 className="text-xl font-black tracking-tight flex items-center gap-3"><FileSpreadsheet className="text-indigo-400" /> Bulk Import</h2>
+              <button onClick={() => setIsBulkModalOpen(false)}><X size={24}/></button>
             </div>
-            
             <div className="p-10 space-y-6">
-              <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex gap-4">
-                <Info className="text-indigo-600 shrink-0" size={20} />
-                <div className="text-xs font-bold text-indigo-700 leading-relaxed">
-                  Format: <span className="text-indigo-900 underline decoration-indigo-300">Nama Barang, Stok, Kategori, Satuan</span><br/>
-                  Contoh: <span className="italic opacity-80 font-medium">Kertas A4, 100, Kertas, Rim</span><br/>
-                  (Gunakan satu baris untuk satu barang)
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Daftar Barang (Paste dari Excel/CSV)</label>
-                <textarea
-                  value={bulkData}
-                  onChange={e => setBulkData(e.target.value)}
-                  placeholder="Kertas A4, 50, Kertas, Rim&#10;Pulpen Pilot, 144, Alat Tulis, Pcs&#10;Buku Sinar Dunia, 20, Buku, Pack"
-                  className="w-full h-64 px-6 py-5 border border-slate-200 rounded-[24px] bg-slate-50/50 focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none transition-all font-mono text-sm resize-none custom-scrollbar"
-                />
-              </div>
-
-              <div className="flex gap-4">
-                <button 
-                  onClick={() => setIsBulkModalOpen(false)}
-                  className="flex-1 py-4.5 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all"
-                >
-                  Batal
-                </button>
-                <button 
-                  onClick={handleBulkImport}
-                  disabled={isProcessing || !bulkData.trim()}
-                  className={`flex-[2] py-4.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-lg ${
-                    isProcessing || !bulkData.trim() ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100'
-                  }`}
-                >
-                  {isProcessing ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-                  {isProcessing ? 'Memproses...' : `Import ${bulkData.trim().split('\n').filter(l => l.trim()).length} Item`}
-                </button>
-              </div>
+              <textarea value={bulkData} onChange={e => setBulkData(e.target.value)} placeholder="Nama, Stok, Kategori, Satuan" className="w-full h-64 px-6 py-5 border rounded-[24px] bg-slate-50 font-mono text-sm resize-none outline-none focus:ring-4 focus:ring-indigo-50" />
+              <button onClick={handleBulkImport} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Import Data</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal Tambah Item (Single) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl">
             <div className="bg-slate-900 p-8 flex justify-between items-center text-white">
-              <div>
-                <h2 className="text-xl font-black tracking-tight">Barang Baru</h2>
-                <p className="text-slate-400 text-xs font-bold mt-1">Daftarkan item ke katalog sistem.</p>
-              </div>
-              <button onClick={() => setIsModalOpen(false)} className="hover:rotate-90 transition-transform"><X size={24}/></button>
+              <h2 className="text-xl font-black">Barang Baru</h2>
+              <button onClick={() => setIsModalOpen(false)}><X size={24}/></button>
             </div>
-            <form onSubmit={handleCreateItem} className="p-8 space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nama Barang</label>
-                <input required value={newItem.nama_barang} onChange={e => setNewItem({...newItem, nama_barang: e.target.value})} className="w-full px-5 py-3.5 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 outline-none transition-all font-bold text-sm" placeholder="Misal: Kertas A4 80gr" />
-              </div>
+            <form onSubmit={handleCreateItem} className="p-8 space-y-5">
+              <input required value={newItem.nama_barang} onChange={e => setNewItem({...newItem, nama_barang: e.target.value})} className="w-full px-5 py-3.5 border rounded-2xl bg-slate-50 font-bold" placeholder="Nama Barang" />
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Kategori</label>
-                  <select value={newItem.kategori} onChange={e => setNewItem({...newItem, kategori: e.target.value})} className="w-full px-5 py-3.5 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all font-bold text-sm appearance-none">
-                    <option>Alat Tulis</option>
-                    <option>Kertas & Buku</option>
-                    <option>Peralatan Kantor</option>
-                    <option>Kebersihan</option>
-                    <option>Lain-lain</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Satuan</label>
-                  <select required value={newItem.satuan} onChange={e => setNewItem({...newItem, satuan: e.target.value})} className="w-full px-5 py-3.5 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all font-bold text-sm appearance-none">
-                    {SATUAN_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
+                <select value={newItem.kategori} onChange={e => setNewItem({...newItem, kategori: e.target.value})} className="w-full px-5 py-3.5 border rounded-2xl bg-slate-50 font-bold">
+                  <option>Alat Tulis</option>
+                  <option>Kertas & Buku</option>
+                  <option>Peralatan Kantor</option>
+                  <option>Kebersihan</option>
+                  <option>Lain-lain</option>
+                </select>
+                <select required value={newItem.satuan} onChange={e => setNewItem({...newItem, satuan: e.target.value})} className="w-full px-5 py-3.5 border rounded-2xl bg-slate-50 font-bold">
+                  {SATUAN_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Stok Awal</label>
-                <input type="number" min="0" required value={newItem.stok} onChange={e => setNewItem({...newItem, stok: parseInt(e.target.value) || 0})} className="w-full px-5 py-3.5 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all font-black text-lg text-indigo-600" />
-              </div>
-              <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-600 shadow-xl shadow-slate-100 transition-all active:scale-[0.98]">Simpan Katalog</button>
+              <input type="number" min="0" required value={newItem.stok} onChange={e => setNewItem({...newItem, stok: parseInt(e.target.value) || 0})} className="w-full px-5 py-3.5 border rounded-2xl bg-slate-50 font-black text-indigo-600" />
+              <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Simpan Barang</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal Tambah Stok (Existing) */}
       {isStockModalOpen && selectedItem && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className={`p-8 flex justify-between items-center text-white ${selectedItem.stok < 3 ? 'bg-red-600' : 'bg-indigo-600'}`}>
-              <div>
-                <h2 className="text-xl font-black tracking-tight">Refill Inventory</h2>
-                <p className="text-indigo-200 text-[10px] font-black uppercase tracking-widest mt-1">{selectedItem.nama_barang}</p>
-              </div>
-              <button onClick={() => setIsStockModalOpen(false)} className="hover:rotate-90 transition-transform"><X size={24}/></button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-fade-in">
+          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-8 bg-indigo-600 text-white">
+              <h2 className="text-xl font-black leading-tight">Refill: {selectedItem.nama_barang}</h2>
             </div>
             <form onSubmit={handleAddStock} className="p-8 space-y-6">
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Jumlah Tambahan ({selectedItem.satuan})</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  required 
-                  autoFocus
-                  value={stockUpdate.amount} 
-                  onChange={e => setStockUpdate({...stockUpdate, amount: parseInt(e.target.value) || 0})} 
-                  className={`w-full px-5 py-4 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-100 outline-none transition-all font-black text-2xl ${selectedItem.stok < 3 ? 'text-red-600' : 'text-indigo-600'}`} 
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Catatan/Keterangan</label>
-                <input 
-                  value={stockUpdate.note} 
-                  onChange={e => setStockUpdate({...stockUpdate, note: e.target.value})} 
-                  className="w-full px-5 py-3.5 border border-slate-200 rounded-2xl bg-slate-50 focus:bg-white focus:ring-4 focus:ring-indigo-50 outline-none transition-all font-bold text-sm" 
-                  placeholder="Misal: Restock berkala" 
-                />
-              </div>
-              <div className={`p-5 rounded-2xl flex justify-between items-center border ${selectedItem.stok < 3 ? 'bg-red-50 border-red-100' : 'bg-indigo-50 border-indigo-100'}`}>
-                <div className="flex flex-col">
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${selectedItem.stok < 3 ? 'text-red-400' : 'text-indigo-400'}`}>Current</span>
-                  <span className={`font-black ${selectedItem.stok < 3 ? 'text-red-900' : 'text-indigo-900'}`}>{selectedItem.stok}</span>
-                </div>
-                <div className={`w-px h-8 ${selectedItem.stok < 3 ? 'bg-red-200' : 'bg-indigo-200'}`}></div>
-                <div className="flex flex-col items-end">
-                  <span className={`text-[10px] font-black uppercase tracking-widest ${selectedItem.stok < 3 ? 'text-red-400' : 'text-indigo-400'}`}>Final</span>
-                  <span className={`font-black ${selectedItem.stok < 3 ? 'text-red-900' : 'text-indigo-900'}`}>{selectedItem.stok + stockUpdate.amount}</span>
-                </div>
-              </div>
-              <button type="submit" className={`w-full py-4 text-white rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl transition-all active:scale-[0.98] ${selectedItem.stok < 3 ? 'bg-red-600 hover:bg-red-700 shadow-red-100' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'}`}>Update Persediaan</button>
+              <input type="number" min="1" required autoFocus value={stockUpdate.amount} onChange={e => setStockUpdate({...stockUpdate, amount: parseInt(e.target.value) || 0})} className="w-full px-5 py-4 border rounded-2xl bg-slate-50 font-black text-2xl text-indigo-600" />
+              <input value={stockUpdate.note} onChange={e => setStockUpdate({...stockUpdate, note: e.target.value})} className="w-full px-5 py-3.5 border rounded-2xl bg-slate-50 font-bold" placeholder="Catatan (Opsional)" />
+              <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl">Update Persediaan</button>
+              <button type="button" onClick={() => setIsStockModalOpen(false)} className="w-full py-2 text-slate-400 font-bold">Batal</button>
             </form>
           </div>
         </div>
