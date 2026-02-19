@@ -156,7 +156,7 @@ const UserPortal: React.FC = () => {
           <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/20 rounded-full blur-[100px]"></div>
           <div className="relative z-10">
             <h1 className="text-4xl font-black leading-tight mb-6">Ambil <span className="text-indigo-400">ATK.</span></h1>
-            <p className="text-slate-400 text-sm font-medium">Catat pengambilan barang. Sekarang lebih simpel dengan pilih tanggal saja tanpa jam.</p>
+            <p className="text-slate-400 text-sm font-medium">Silahkan catat pengambilan barang anda</p>
           </div>
           <div className="relative z-10 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
             <p className="text-sm font-bold">Logistik PLA</p>
