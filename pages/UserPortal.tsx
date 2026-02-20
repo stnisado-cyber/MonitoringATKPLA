@@ -26,12 +26,10 @@ const UserPortal: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  // Searchable Item States
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Helper for current date format (YYYY-MM-DD)
   const getCurrentDate = () => {
     const now = new Date();
     return now.toISOString().split('T')[0];
@@ -43,7 +41,7 @@ const UserPortal: React.FC = () => {
     item_id: '',
     jumlah: 1,
     keterangan: '',
-    created_at: getCurrentDate() // Default to current date only
+    created_at: getCurrentDate()
   });
 
   useEffect(() => {
@@ -95,33 +93,38 @@ const UserPortal: React.FC = () => {
 
     try {
       const newStock = (selectedItem?.stok || 0) - formData.jumlah;
+      
       const { error: updateError } = await supabase.from('atk_items').update({ stok: newStock }).eq('id', formData.item_id);
       
-      if (updateError) throw updateError;
+      if (updateError) {
+        if (updateError.code === '42501') {
+          throw new Error("Izin Update Stok Ditolak (RLS). Silakan jalankan perintah SQL Policy UPDATE di Dashboard Supabase.");
+        }
+        throw updateError;
+      }
 
-      // When sending back-date, we combine the manual date with the current time
-      // to ensure it correctly sorts in the transaction history
       const now = new Date();
       const [year, month, day] = formData.created_at.split('-').map(Number);
       const transactionDate = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
 
-      const transactionData: any = {
+      const { error: transError } = await supabase.from('transactions').insert([{
         item_id: formData.item_id,
         jumlah: formData.jumlah,
         tipe: 'keluar',
         nama_pengambil: formData.nama_pengambil,
+        departemen: formData.departemen,
         keterangan: formData.keterangan,
         created_at: transactionDate.toISOString() 
-      };
-      
-      if (formData.departemen) {
-        transactionData.departemen = formData.departemen;
+      }]);
+
+      if (transError) {
+        if (transError.code === '42501') {
+          throw new Error("Izin Log Transaksi Ditolak (RLS). Silakan jalankan perintah SQL Policy INSERT di Dashboard Supabase.");
+        }
+        throw transError;
       }
 
-      const { error: transError } = await supabase.from('transactions').insert(transactionData);
-      if (transError) throw transError;
-
-      setMessage({ type: 'success', text: `Berhasil! ${selectedItem?.nama_barang || 'Permintaan'} telah dicatat.` });
+      setMessage({ type: 'success', text: `Berhasil mencatat pengambilan ${selectedItem?.nama_barang}!` });
       
       setFormData({ 
         ...formData, 
@@ -134,7 +137,7 @@ const UserPortal: React.FC = () => {
       fetchItems();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setMessage({ type: 'error', text: 'Koneksi database bermasalah. Coba lagi.' });
+      setMessage({ type: 'error', text: err.message || 'Terjadi kesalahan sistem.' });
     } finally {
       setSubmitting(false);
     }
@@ -151,7 +154,6 @@ const UserPortal: React.FC = () => {
     <div className="max-w-5xl mx-auto py-2 animate-fade-in">
       <div className="grid grid-cols-1 lg:grid-cols-12 bg-white rounded-[40px] shadow-2xl overflow-hidden border border-slate-100">
         
-        {/* Visual Sidebar */}
         <div className="lg:col-span-4 bg-slate-900 p-12 flex flex-col justify-between text-white relative overflow-hidden">
           <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/20 rounded-full blur-[100px]"></div>
           <div className="relative z-10">
@@ -160,19 +162,21 @@ const UserPortal: React.FC = () => {
           </div>
           <div className="relative z-10 bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
             <p className="text-sm font-bold">Logistik PLA</p>
-            <p className="text-xs text-slate-400">Back-date tersedia untuk laporan telat.</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">Sistem Mandiri Inventaris</p>
           </div>
         </div>
 
-        {/* Form Side */}
         <div className="lg:col-span-8 p-10 bg-white">
           <form onSubmit={handleSubmit} className="space-y-5">
             {message && (
-              <div className={`p-4 rounded-[20px] flex items-center gap-4 border animate-bounce-subtle ${
+              <div className={`p-5 rounded-[24px] flex items-start gap-4 border ${
                 message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-red-50 text-red-700 border-red-100'
               }`}>
-                {message.type === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-                <span className="font-bold text-sm">{message.text}</span>
+                {message.type === 'success' ? <CheckCircle2 size={24} className="mt-0.5" /> : <AlertCircle size={24} className="mt-0.5" />}
+                <div className="flex flex-col">
+                  <span className="font-black text-sm uppercase tracking-tight">{message.type === 'success' ? 'Berhasil' : 'Masalah Database'}</span>
+                  <p className="text-sm opacity-90 leading-relaxed">{message.text}</p>
+                </div>
               </div>
             )}
 
@@ -218,9 +222,6 @@ const UserPortal: React.FC = () => {
                 />
                 <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
               </div>
-              <p className="text-[9px] text-indigo-400 font-bold italic ml-2 mt-1">
-                *Hanya pilih tanggal. Jam akan otomatis mengikuti waktu sistem.
-              </p>
             </div>
 
             <div className="space-y-1.5 relative" ref={dropdownRef}>
@@ -264,7 +265,7 @@ const UserPortal: React.FC = () => {
                       >
                         <div className="flex flex-col">
                           <span className="text-sm font-black">{item.nama_barang || 'Item'}</span>
-                          <span className={`text-[10px] font-bold uppercase ${formData.item_id === item.id ? 'text-indigo-200' : 'text-slate-400'}`}>{item.kategori} • Tersedia: {item.stok || 0}</span>
+                          <span className={`text-[10px] font-bold uppercase ${formData.item_id === item.id ? 'text-indigo-200' : 'text-slate-400'}`}>Tersedia: {item.stok || 0} {item.satuan}</span>
                         </div>
                         {formData.item_id === item.id && <Check size={18} />}
                       </div>
